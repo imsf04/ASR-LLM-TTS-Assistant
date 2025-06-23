@@ -1,0 +1,6 @@
+@echo off
+echo 运行诊断脚本...
+python diagnose.py
+echo.
+echo 诊断完成，按任意键继续...
+pause

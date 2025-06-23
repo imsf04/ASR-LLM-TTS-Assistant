@@ -87,18 +87,36 @@ class ChatMessage(Base):
     session = relationship("ChatSession", back_populates="messages")
 
 class DatabaseManager:
-    """Database operations manager"""
+    """Database operations manager with fallback to memory storage"""
     
     def __init__(self, config: Config):
         self.config = config
         self.logger = logging.getLogger(__name__)
         
-        # Initialize PostgreSQL
+        # Initialize database mode flags
+        self.postgres_available = False
+        self.redis_available = False
+        
+        # Memory storage fallbacks
+        self.memory_users = {}
+        self.memory_documents = {}
+        self.memory_chat_sessions = {}
+        self.memory_chat_messages = {}
+        self.memory_cache = {}
+        
+        # Try to initialize PostgreSQL
         self._init_postgres()
         
-        # Initialize Redis
+        # Try to initialize Redis
         self._init_redis()
-    
+        
+        # Log the current mode
+        if self.postgres_available and self.redis_available:
+            self.logger.info("数据库模式：完整模式（PostgreSQL + Redis）")
+        elif self.postgres_available:
+            self.logger.info("数据库模式：部分模式（仅PostgreSQL）")
+        else:
+            self.logger.info("数据库模式：内存模式（PostgreSQL和Redis不可用，使用内存存储）")    
     def _init_postgres(self):
         """Initialize PostgreSQL connection"""
         try:
@@ -120,11 +138,20 @@ class DatabaseManager:
             # Create tables
             Base.metadata.create_all(bind=self.engine)
             
-            self.logger.info("PostgreSQL initialized successfully")
+            # Test connection
+            test_session = self.SessionLocal()
+            test_session.execute("SELECT 1")
+            test_session.close()
+            
+            self.postgres_available = True
+            self.logger.info("PostgreSQL初始化成功")
             
         except Exception as e:
-            self.logger.error(f"Failed to initialize PostgreSQL: {str(e)}")
-            raise
+            self.postgres_available = False
+            self.logger.warning(f"PostgreSQL初始化失败，将使用内存存储: {str(e)}")
+            # Set up dummy session for compatibility
+            self.engine = None
+            self.SessionLocal = None
     
     def _init_redis(self):
         """Initialize Redis connection"""
@@ -143,11 +170,13 @@ class DatabaseManager:
             # Test connection
             self.redis_client.ping()
             
-            self.logger.info("Redis initialized successfully")
+            self.redis_available = True
+            self.logger.info("Redis初始化成功")
             
         except Exception as e:
-            self.logger.error(f"Failed to initialize Redis: {str(e)}")
-            raise
+            self.redis_available = False
+            self.logger.warning(f"Redis初始化失败，将使用内存缓存: {str(e)}")
+            self.redis_client = None
     
     def get_db_session(self) -> Session:
         """Get database session"""

@@ -6,8 +6,53 @@ let mediaRecorder = null;
 let audioChunks = [];
 let isTTSEnabled = false;
 
+// 实时语音对话相关
+let socket;
+let audioContext;
+let scriptProcessor;
+let mediaStreamSource;
+let isVoiceChatActive = false;
+const audioQueue = [];
+let isPlaying = false;
+
+const SAMPLE_RATE = 16000;
+const BUFFER_SIZE = 4096;
+
+// DOM元素引用
+let voiceChatBtn;
+let pauseVoiceBtn;
+let recordBtn;
+let sendBtn;
+let chatInput;
+
 // 初始化
-document.addEventListener('DOMContentLoaded', function () {
+document.addEventListener('DOMContentLoaded', function () {    // 获取DOM元素引用
+    voiceChatBtn = document.getElementById('voice-chat-btn');
+    pauseVoiceBtn = document.getElementById('pause-voice-btn');
+    recordBtn = document.getElementById('record-btn');
+    sendBtn = document.getElementById('send-btn');
+    chatInput = document.getElementById('chat-input');    // 绑定事件监听器
+    if (voiceChatBtn) {
+        voiceChatBtn.addEventListener('click', () => {
+            if (isVoiceChatActive) {
+                stopVoiceChat();
+            } else {
+                startVoiceChat();
+            }
+        });
+    }
+
+    // 绑定暂停按钮事件
+    if (pauseVoiceBtn) {
+        pauseVoiceBtn.addEventListener('click', () => {
+            if (pauseVoiceBtn.textContent.includes('暂停')) {
+                pauseVoiceChat();
+            } else {
+                resumeVoiceChat();
+            }
+        });
+    }
+
     // 移除欢迎消息当有真实对话时
     clearWelcomeMessage();
 
@@ -577,3 +622,265 @@ window.addEventListener('resize', function () {
         document.querySelector('.sidebar').classList.remove('show');
     }
 });
+
+// --- 实时语音对话函数 ---
+function initSocket() {
+    socket = io.connect(location.protocol + '//' + document.domain + ':' + location.port + '/voice');
+
+    socket.on('connect', () => {
+        console.log('成功连接到Socket.IO服务器');
+        showToast('实时连接已建立');
+    });
+
+    socket.on('disconnect', () => {
+        console.log('与Socket.IO服务器断开连接');
+        showToast('实时连接已断开', 'error');
+        stopVoiceChat();
+    }); socket.on('server_message', (data) => {
+        console.log('来自服务器的消息:', data.message);
+        showToast(data.message, 'info');
+    });
+
+    socket.on('voice_status', (data) => {
+        console.log('语音状态:', data.status, data.message);
+
+        // 根据状态更新UI
+        if (data.status === 'speaking') {
+            showToast('🗣️ ' + data.message, 'info');
+        } else if (data.status === 'processing') {
+            showToast('⚙️ ' + data.message, 'warning');
+        } else if (data.status === 'idle') {
+            showToast('😴 ' + data.message, 'secondary');
+        }
+
+        // 更新按钮状态
+        updateVoiceChatButtonStatus(data.status);
+    });
+
+    socket.on('asr_result', (data) => {
+        console.log('ASR 结果:', data.text);
+        renderMessage('user', data.text, new Date().toLocaleTimeString());
+    }); socket.on('tts_speech', (data) => {
+        console.log('收到TTS音频');
+        const audioBlob = new Blob([base64ToBytes(data.audio)], { type: 'audio/mpeg' });
+        const audioUrl = URL.createObjectURL(audioBlob);
+        audioQueue.push(audioUrl);
+        playFromQueue();
+    });
+
+    socket.on('llm_response', (data) => {
+        console.log('LLM回复:', data.text);
+        renderMessage('assistant', data.text, new Date().toLocaleTimeString());
+    });
+
+    socket.on('server_error', (data) => {
+        console.error('服务器错误:', data.message);
+        showToast(`错误: ${data.message}`, 'error');
+    });
+}
+
+// 显示提示消息
+function showToast(message, type = 'info') {
+    const toast = document.createElement('div');
+    toast.className = `alert alert-${type === 'error' ? 'danger' : type === 'success' ? 'success' : 'info'} position-fixed`;
+    toast.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 250px;';
+    toast.textContent = message;
+
+    document.body.appendChild(toast);
+
+    setTimeout(() => {
+        if (document.body.contains(toast)) {
+            document.body.removeChild(toast);
+        }
+    }, 3000);
+}
+
+function startVoiceChat() {
+    if (!socket || !socket.connected) {
+        initSocket();
+    }
+
+    navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+        isVoiceChatActive = true;
+        if (voiceChatBtn) {
+            voiceChatBtn.innerHTML = '<i class="fas fa-headset"></i> 停止实时对话';
+            voiceChatBtn.classList.replace('btn-info', 'btn-danger');
+        }
+        if (pauseVoiceBtn) {
+            pauseVoiceBtn.style.display = 'inline-block';
+            pauseVoiceBtn.innerHTML = '<i class="fas fa-pause"></i> 暂停对话';
+            pauseVoiceBtn.classList.remove('btn-success');
+            pauseVoiceBtn.classList.add('btn-warning');
+        }
+        showToast('实时对话已开始', 'success');
+
+        audioContext = new (window.AudioContext || window.webkitAudioContext)({
+            sampleRate: SAMPLE_RATE
+        });
+
+        mediaStreamSource = audioContext.createMediaStreamSource(stream);
+        scriptProcessor = audioContext.createScriptProcessor(BUFFER_SIZE, 1, 1);
+
+        scriptProcessor.onaudioprocess = (event) => {
+            if (!isVoiceChatActive) return;
+            const inputData = event.inputBuffer.getChannelData(0);
+            // 将float32转换为16-bit PCM
+            const pcmData = float32To16BitPCM(inputData);
+            socket.emit('stream', pcmData);
+        };
+
+        mediaStreamSource.connect(scriptProcessor);
+        scriptProcessor.connect(audioContext.destination);
+
+        // 实现打断逻辑：如果用户开始说话，停止当前播放
+        const vadNode = audioContext.createAnalyser();
+        vadNode.fftSize = 512;
+        mediaStreamSource.connect(vadNode);
+        const vadBuffer = new Uint8Array(vadNode.frequencyBinCount);
+        let speaking = false;
+        setInterval(() => {
+            vadNode.getByteFrequencyData(vadBuffer);
+            const sum = vadBuffer.reduce((a, b) => a + b, 0);
+            if (sum > 500) { // 简单的能量检测
+                if (!speaking) {
+                    speaking = true;
+                    console.log("用户开始说话，打断TTS");
+                    stopAllAudio();
+                }
+            } else {
+                speaking = false;
+            }
+        }, 100);
+
+    })
+        .catch(err => {
+            console.error('无法获取麦克风:', err);
+            showToast('无法获取麦克风权限', 'error');
+        });
+}
+
+function stopVoiceChat() {
+    if (isVoiceChatActive) {
+        isVoiceChatActive = false;
+
+        // 发送强制停止信号给服务器
+        if (socket && socket.connected) {
+            socket.emit('force_stop');
+        }
+
+        if (scriptProcessor) {
+            scriptProcessor.disconnect();
+            scriptProcessor = null;
+        }
+        if (mediaStreamSource) {
+            mediaStreamSource.disconnect();
+            mediaStreamSource.mediaStream.getTracks().forEach(track => track.stop());
+            mediaStreamSource = null;
+        }
+        if (audioContext) {
+            audioContext.close();
+            audioContext = null;
+        } if (voiceChatBtn) {
+            voiceChatBtn.innerHTML = '<i class="fas fa-headset"></i> 开始实时对话';
+            voiceChatBtn.classList.replace('btn-danger', 'btn-info');
+            voiceChatBtn.disabled = false;
+        }
+        if (pauseVoiceBtn) {
+            pauseVoiceBtn.style.display = 'none';
+        }
+        showToast('实时对话已结束');
+    }
+}
+
+// 更新语音按钮状态
+function updateVoiceChatButtonStatus(status) {
+    if (!voiceChatBtn) return;
+
+    switch (status) {
+        case 'speaking':
+            voiceChatBtn.innerHTML = '<i class="fas fa-microphone animate__animated animate__pulse animate__infinite"></i> 正在说话...';
+            voiceChatBtn.disabled = false;
+            break;
+        case 'processing':
+            voiceChatBtn.innerHTML = '<i class="fas fa-cog fa-spin"></i> 正在处理...';
+            voiceChatBtn.disabled = true;
+            break;
+        case 'idle':
+            voiceChatBtn.innerHTML = '<i class="fas fa-headset"></i> 停止实时对话';
+            voiceChatBtn.disabled = false;
+            break;
+        default:
+            voiceChatBtn.innerHTML = '<i class="fas fa-headset"></i> 开始实时对话';
+            voiceChatBtn.disabled = false;
+            break;
+    }
+}
+
+function playFromQueue() {
+    if (isPlaying || audioQueue.length === 0) {
+        return;
+    }
+    isPlaying = true;
+    const audioUrl = audioQueue.shift();
+    const audio = new Audio(audioUrl);
+    audio.play();
+    audio.onended = () => {
+        isPlaying = false;
+        URL.revokeObjectURL(audioUrl);
+        playFromQueue();
+    };
+}
+
+function stopAllAudio() {
+    const audios = document.querySelectorAll('audio');
+    audios.forEach(audio => {
+        audio.pause();
+        audio.currentTime = 0;
+    });
+    audioQueue.length = 0; // 清空队列
+    isPlaying = false;
+}
+
+function float32To16BitPCM(float32Array) {
+    const pcm16 = new Int16Array(float32Array.length);
+    for (let i = 0; i < float32Array.length; i++) {
+        let s = Math.max(-1, Math.min(1, float32Array[i]));
+        pcm16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+    }
+    return pcm16.buffer;
+}
+
+function base64ToBytes(base64) {
+    const binaryString = window.atob(base64);
+    const len = binaryString.length;
+    const bytes = new Uint8Array(len);
+    for (let i = 0; i < len; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+    } return bytes;
+}
+
+// 暂停语音对话
+function pauseVoiceChat() {
+    if (socket && socket.connected) {
+        socket.emit('pause_voice');
+        if (pauseVoiceBtn) {
+            pauseVoiceBtn.innerHTML = '<i class="fas fa-play"></i> 恢复对话';
+            pauseVoiceBtn.classList.remove('btn-warning');
+            pauseVoiceBtn.classList.add('btn-success');
+        }
+        showToast('语音对话已暂停', 'warning');
+    }
+}
+
+// 恢复语音对话
+function resumeVoiceChat() {
+    if (socket && socket.connected) {
+        socket.emit('resume_voice');
+        if (pauseVoiceBtn) {
+            pauseVoiceBtn.innerHTML = '<i class="fas fa-pause"></i> 暂停对话';
+            pauseVoiceBtn.classList.remove('btn-success');
+            pauseVoiceBtn.classList.add('btn-warning');
+        }
+        showToast('语音对话已恢复', 'success');
+    }
+}

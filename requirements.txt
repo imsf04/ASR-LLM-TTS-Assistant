@@ -32,8 +32,8 @@ python-dotenv==1.0.1
 
 # Utilities
 requests==2.31.0
-numpy==1.24.3
-pandas==2.0.3
+numpy==1.26.4
+pandas==2.2.2
 
 # Development and Testing
 pytest==7.4.4
@@ -55,3 +55,7 @@ tqdm==4.66.1
 
 # Web server
 gunicorn==21.2.0
+# For WebSocket, real-time features, and VAD
+flask-socketio
+gevent
+webrtcvad-wheels
