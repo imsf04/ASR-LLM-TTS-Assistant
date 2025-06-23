@@ -1,0 +1,57 @@
+# Flask Web Framework
+Flask==3.0.0
+Flask-CORS==4.0.0
+Flask-Session==0.5.0
+
+# AI and ML libraries
+langchain==0.1.20
+langchain-community==0.0.38
+dashscope==1.20.0
+
+# Vector Database
+chromadb==0.4.24
+
+# Document Processing
+PyPDF2==3.0.1
+python-docx==1.1.0
+beautifulsoup4==4.12.2
+lxml==5.2.1
+
+# Audio Processing
+librosa==0.10.1
+soundfile==0.12.1
+pydub==0.25.1
+
+# Database connections
+redis==5.0.1
+psycopg2-binary==2.9.9
+SQLAlchemy==2.0.23
+
+# Environment and Configuration
+python-dotenv==1.0.1
+
+# Utilities
+requests==2.31.0
+numpy==1.24.3
+pandas==2.0.3
+
+# Development and Testing
+pytest==7.4.4
+black==23.12.1
+flake8==7.0.0
+
+# Logging
+structlog==23.2.0
+
+# File Upload Security
+werkzeug==3.0.1
+
+# Text Processing
+pypinyin==0.50.0
+jieba==0.42.1
+
+# Additional utilities
+tqdm==4.66.1
+
+# Web server
+gunicorn==21.2.0

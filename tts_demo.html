@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TTS语音播报功能演示</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .demo-section {
+            margin: 2rem 0;
+            padding: 1.5rem;
+            border: 1px solid #dee2e6;
+            border-radius: 0.375rem;
+            background-color: #f8f9fa;
+        }
+
+        .feature-card {
+            border: 1px solid #dee2e6;
+            border-radius: 0.375rem;
+            padding: 1rem;
+            margin: 0.5rem 0;
+            background-color: white;
+        }
+
+        .btn-tts {
+            background: linear-gradient(45deg, #007bff, #0056b3);
+            border: none;
+            color: white;
+        }
+
+        .btn-tts:hover {
+            background: linear-gradient(45deg, #0056b3, #003d82);
+            color: white;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 0.5rem;
+        }
+
+        .status-success {
+            background-color: #28a745;
+        }
+
+        .status-warning {
+            background-color: #ffc107;
+        }
+
+        .status-error {
+            background-color: #dc3545;
+        }
+
+        .tts-demo-text {
+            background-color: #e9ecef;
+            padding: 1rem;
+            border-radius: 0.375rem;
+            margin: 1rem 0;
+            border-left: 4px solid #007bff;
+        }
+
+        .voice-option {
+            padding: 0.5rem;
+            margin: 0.25rem;
+            border: 1px solid #dee2e6;
+            border-radius: 0.25rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .voice-option:hover {
+            background-color: #e9ecef;
+        }
+
+        .voice-option.selected {
+            background-color: #007bff;
+            color: white;
+            border-color: #007bff;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container py-4">
+        <div class="row">
+            <div class="col-12">
+                <!-- 页面头部 -->
+                <div class="text-center mb-4">
+                    <h1 class="display-4">🎵 TTS语音播报功能演示</h1>
+                    <p class="lead">ASR-LLM-TTS智能助手 - 基于阿里云DashScope CosyVoice v2</p>
+                </div>
+
+                <!-- 服务状态检查 -->
+                <div class="demo-section">
+                    <h3><i class="fas fa-server me-2"></i>服务状态检查</h3>
+                    <div class="d-flex align-items-center">
+                        <span class="status-indicator status-warning" id="statusIndicator"></span>
+                        <span id="statusText">检查中...</span>
+                        <button class="btn btn-sm btn-outline-primary ms-auto" onclick="checkServerStatus()">
+                            <i class="fas fa-sync-alt"></i> 刷新状态
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 功能特性介绍 -->
+                <div class="demo-section">
+                    <h3><i class="fas fa-star me-2"></i>功能特性</h3>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="feature-card">
+                                <h5><i class="fas fa-volume-up text-primary"></i> 自动语音播报</h5>
+                                <p>AI回复自动播放语音，支持开启/关闭</p>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="feature-card">
+                                <h5><i class="fas fa-play-circle text-success"></i> 手动语音播报</h5>
+                                <p>针对特定内容点击朗读按钮播放</p>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="feature-card">
+                                <h5><i class="fas fa-microphone text-info"></i> 多种语音选择</h5>
+                                <p>支持7种不同的中文语音（男声/女声）</p>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="feature-card">
+                                <h5><i class="fas fa-cloud text-warning"></i> 云端语音合成</h5>
+                                <p>基于阿里云DashScope的高质量语音合成</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 语音选择 -->
+                <div class="demo-section">
+                    <h3><i class="fas fa-user-friends me-2"></i>语音选择</h3>
+                    <div class="row" id="voiceOptions">
+                        <!-- 语音选项将通过JavaScript动态生成 -->
+                    </div>
+                </div>
+
+                <!-- TTS演示 -->
+                <div class="demo-section">
+                    <h3><i class="fas fa-magic me-2"></i>TTS演示</h3>
+
+                    <!-- 预设演示文本 -->
+                    <div class="mb-3">
+                        <h5>预设演示文本：</h5>
+                        <div class="row">
+                            <div class="col-md-4">
+                                <button class="btn btn-outline-secondary btn-sm w-100 mb-2"
+                                    onclick="setDemoText('欢迎使用ASR-LLM-TTS智能助手！这是一个集成了语音识别、大语言模型对话和语音合成的智能助手系统。')">
+                                    欢迎介绍
+                                </button>
+                            </div>
+                            <div class="col-md-4">
+                                <button class="btn btn-outline-secondary btn-sm w-100 mb-2"
+                                    onclick="setDemoText('人工智能技术的发展正在改变我们的生活方式。从语音识别到自然语言处理，AI正在各个领域发挥重要作用。')">
+                                    技术介绍
+                                </button>
+                            </div>
+                            <div class="col-md-4">
+                                <button class="btn btn-outline-secondary btn-sm w-100 mb-2"
+                                    onclick="setDemoText('今天天气真不错，阳光明媚，微风徐徐。正是出门散步的好时光。')">
+                                    日常对话
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 自定义文本输入 -->
+                    <div class="mb-3">
+                        <label for="ttsText" class="form-label">自定义文本：</label>
+                        <textarea class="form-control" id="ttsText" rows="3"
+                            placeholder="请输入要转换为语音的文本...">欢迎使用ASR-LLM-TTS智能助手的语音播报功能！</textarea>
+                    </div>
+
+                    <!-- 播放控制 -->
+                    <div class="d-flex gap-2 align-items-center">
+                        <button class="btn btn-tts" onclick="playTTS()" id="playBtn">
+                            <i class="fas fa-play"></i> 播放语音
+                        </button>
+                        <button class="btn btn-outline-danger" onclick="stopTTS()" id="stopBtn" disabled>
+                            <i class="fas fa-stop"></i> 停止播放
+                        </button>
+                        <div class="flex-grow-1"></div>
+                        <span class="text-muted" id="ttsStatus">准备就绪</span>
+                    </div>
+
+                    <!-- 音频播放器（隐藏） -->
+                    <audio id="audioPlayer" style="display: none;" controls></audio>
+                </div>
+
+                <!-- 使用说明 -->
+                <div class="demo-section">
+                    <h3><i class="fas fa-info-circle me-2"></i>使用说明</h3>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h5>🖥️ Web界面使用</h5>
+                            <ol>
+                                <li>访问主页面 http://localhost:5000</li>
+                                <li>点击左侧边栏"开启语音"启用自动播报</li>
+                                <li>发送消息后AI回复会自动播放语音</li>
+                                <li>也可点击回复下方的"🔊 朗读"按钮手动播放</li>
+                            </ol>
+                        </div>
+                        <div class="col-md-6">
+                            <h5>🎙️ 语音识别结合使用</h5>
+                            <ol>
+                                <li>点击"开始录音"按钮</li>
+                                <li>说话完成后点击"停止录音"</li>
+                                <li>识别结果自动填入输入框</li>
+                                <li>点击"发送"按钮，AI回复将自动播放语音</li>
+                            </ol>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- API示例 -->
+                <div class="demo-section">
+                    <h3><i class="fas fa-code me-2"></i>API调用示例</h3>
+                    <pre class="bg-dark text-light p-3 rounded"><code>// JavaScript前端调用
+async function callTTSAPI(text, voice = 'longxiaochun_v2') {
+    const response = await fetch('/tts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: text, voice: voice })
+    });
+    
+    const data = await response.json();
+    if (data.success) {
+        // 播放返回的Base64音频数据
+        playAudioFromBase64(data.audio);
+    }
+}</code></pre>
+                </div>
+
+                <!-- 底部链接 -->
+                <div class="text-center mt-4">
+                    <a href="http://localhost:5000" class="btn btn-primary btn-lg me-3">
+                        <i class="fas fa-home"></i> 返回主页面
+                    </a>
+                    <a href="TTS功能使用说明.md" class="btn btn-outline-primary btn-lg">
+                        <i class="fas fa-book"></i> 详细说明文档
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // 全局变量
+        let currentAudio = null;
+        let selectedVoice = 'longxiaochun_v2';
+
+        // 可用语音列表
+        const voices = {
+            'longxiaochun_v2': { name: '龙小春', gender: '女声', description: '温柔甜美' },
+            'longxiaoxia_v2': { name: '龙小夏', gender: '女声', description: '活泼开朗' },
+            'longwan_v2': { name: '龙万', gender: '男声', description: '成熟稳重' },
+            'longcheng_v2': { name: '龙城', gender: '男声', description: '磁性低沉' },
+            'longhua_v2': { name: '龙华', gender: '男声', description: '清晰标准' },
+            'longshu_v2': { name: '龙书', gender: '男声', description: '书卷气息' },
+            'loongbella_v2': { name: 'Bella', gender: '女声', description: '优雅知性' }
+        };
+
+        // 页面加载时初始化
+        document.addEventListener('DOMContentLoaded', function () {
+            checkServerStatus();
+            generateVoiceOptions();
+        });
+
+        // 检查服务器状态
+        async function checkServerStatus() {
+            const statusIndicator = document.getElementById('statusIndicator');
+            const statusText = document.getElementById('statusText');
+
+            try {
+                const response = await fetch('/health');
+                if (response.ok) {
+                    statusIndicator.className = 'status-indicator status-success';
+                    statusText.textContent = '服务器运行正常 ✅';
+                } else {
+                    statusIndicator.className = 'status-indicator status-error';
+                    statusText.textContent = '服务器响应异常 ❌';
+                }
+            } catch (error) {
+                statusIndicator.className = 'status-indicator status-error';
+                statusText.textContent = '无法连接到服务器 ❌ (请先启动Flask应用)';
+            }
+        }
+
+        // 生成语音选项
+        function generateVoiceOptions() {
+            const container = document.getElementById('voiceOptions');
+            container.innerHTML = '';
+
+            Object.keys(voices).forEach(voiceId => {
+                const voice = voices[voiceId];
+                const col = document.createElement('div');
+                col.className = 'col-md-6 col-lg-4';
+
+                const isSelected = voiceId === selectedVoice ? 'selected' : '';
+                col.innerHTML = `
+                    <div class="voice-option ${isSelected}" onclick="selectVoice('${voiceId}')">
+                        <div class="d-flex align-items-center">
+                            <i class="fas fa-${voice.gender === '女声' ? 'female' : 'male'} me-2"></i>
+                            <div>
+                                <strong>${voice.name}</strong>
+                                <br><small class="text-muted">${voice.gender} - ${voice.description}</small>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                container.appendChild(col);
+            });
+        }
+
+        // 选择语音
+        function selectVoice(voiceId) {
+            selectedVoice = voiceId;
+            generateVoiceOptions();
+        }
+
+        // 设置演示文本
+        function setDemoText(text) {
+            document.getElementById('ttsText').value = text;
+        }
+
+        // 播放TTS
+        async function playTTS() {
+            const text = document.getElementById('ttsText').value.trim();
+            if (!text) {
+                alert('请输入要转换的文本');
+                return;
+            }
+
+            const playBtn = document.getElementById('playBtn');
+            const stopBtn = document.getElementById('stopBtn');
+            const status = document.getElementById('ttsStatus');
+
+            try {
+                // 更新UI状态
+                playBtn.disabled = true;
+                status.textContent = '正在合成语音...';
+
+                // 调用TTS API
+                const response = await fetch('/tts', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        text: text,
+                        voice: selectedVoice
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+
+                const data = await response.json();
+
+                if (data.success) {
+                    // 转换Base64为音频并播放
+                    const audioData = atob(data.audio);
+                    const arrayBuffer = new ArrayBuffer(audioData.length);
+                    const uint8Array = new Uint8Array(arrayBuffer);
+
+                    for (let i = 0; i < audioData.length; i++) {
+                        uint8Array[i] = audioData.charCodeAt(i);
+                    }
+
+                    const audioBlob = new Blob([arrayBuffer], { type: 'audio/mp3' });
+                    const audioUrl = URL.createObjectURL(audioBlob);
+
+                    // 停止之前的音频
+                    if (currentAudio) {
+                        currentAudio.pause();
+                        currentAudio = null;
+                    }
+
+                    // 播放新音频
+                    currentAudio = new Audio(audioUrl);
+
+                    currentAudio.onplay = () => {
+                        status.textContent = '正在播放...';
+                        stopBtn.disabled = false;
+                    };
+
+                    currentAudio.onended = () => {
+                        status.textContent = '播放完成';
+                        resetPlayButton();
+                        URL.revokeObjectURL(audioUrl);
+                    };
+
+                    currentAudio.onerror = () => {
+                        status.textContent = '播放失败';
+                        resetPlayButton();
+                        URL.revokeObjectURL(audioUrl);
+                    };
+
+                    await currentAudio.play();
+
+                } else {
+                    throw new Error(data.error || '语音合成失败');
+                }
+
+            } catch (error) {
+                console.error('TTS Error:', error);
+                status.textContent = `错误: ${error.message}`;
+                resetPlayButton();
+            }
+        }
+
+        // 停止播放
+        function stopTTS() {
+            if (currentAudio) {
+                currentAudio.pause();
+                currentAudio = null;
+            }
+            document.getElementById('ttsStatus').textContent = '已停止';
+            resetPlayButton();
+        }
+
+        // 重置播放按钮状态
+        function resetPlayButton() {
+            document.getElementById('playBtn').disabled = false;
+            document.getElementById('stopBtn').disabled = true;
+        }
+    </script>
+</body>
+
+</html>
